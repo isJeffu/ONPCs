@@ -24,6 +24,15 @@ bool Function WalkTo(Actor who, ObjectReference target) global native
 Function GroupSceneStarted(Actor[] actors, int threadID, ObjectReference furniture) global native
 Function GroupSceneEnded(Actor[] actors, int[] climaxes, int threadID, int cause) global native
 
+; 0.27.2 privacy (GetVersion() >= 23): 0 nobody around, 1 someone within earshot (keep quiet), 2 someone awake can see them
+int Function Privacy(Actor[] actors) global native
+; who that is (for the log), "" if nobody
+string Function Witnesser(Actor[] actors) global native
+; the best free bed nobody can see: their own / a partner's / their home's first, out of earshot before "keep quiet"; None = none
+ObjectReference Function PickPrivateBed(Actor[] actors, ObjectReference[] beds) global native
+; they gave up for lack of privacy: none of them starts again for about half an hour
+Function NoPrivacy(Actor[] actors) global native
+
 ; 0.26.0 phase 2 (GetVersion() >= 20): is this OStim thread still running with dom in it? (OStim's own C++ API; -1 = no;
 ; OStim reuses thread IDs after a load, so the actor check keeps someone else's scene from looking like ours)
 bool Function IsSceneRunning(int threadID, Actor dom) global native

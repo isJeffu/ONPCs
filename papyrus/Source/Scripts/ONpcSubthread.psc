@@ -23,6 +23,8 @@ int CurrentOStimSubthreadID
 int DomClimaxes
 int SubClimaxes
 bool StoppedBecauseSeen
+bool StoppedByWitness	; 0.27.2 privacy: someone else saw them
+bool KeptQuiet	; 0.27.2 privacy: muted because someone is within earshot
 bool Watching	; 0.26.0: "stop when seen" checks every 2 s from onUpdate while the scene runs (no loop inside the start event)
 
 ; 0.26.0 phase 3: a group scene (3-5 people; DomActor / SubActor are its first two)
@@ -74,9 +76,9 @@ Event NpcSceneStart(string eventname, string strarg, float numarg, form sender)
 			endif
 		endif
 
-		if !IsFollowerScene && ONpc.StopWhenFound
+		if !IsFollowerScene && (ONpc.StopWhenFound || (ONpc.Privacy && !IsEnemyScene))
 			Watching = true
-			RegisterForSingleUpdate(2.0)
+			WatchScene()	; 0.27.2: the first look right away (keep quiet from the start if someone is within earshot)
 		endif
 	endif
 EndEvent
@@ -87,6 +89,11 @@ Event NpcSceneEnd(string eventname, string strarg, float numarg, form sender)
 	if numarg == CurrentOStimSubthreadID
 		if StoppedBecauseSeen
 			cause = 1
+		elseif StoppedByWitness
+			cause = 2
+		endif
+		if KeptQuiet
+			SetQuiet(false)
 		endif
 		if IsGroupScene && GroupActors
 			ONPCR_Base.GroupSceneEnded(GroupActors, GroupClimaxes, CurrentOStimSubthreadID, cause)	; 0.26.0 phase 3: breaks + scene log
@@ -142,13 +149,15 @@ Function StartScene()
 		endif
 	endif
 
-	if !CheckActorsStillValid()
+	if !CheckActorsStillValid() || PrivacyBlocks()
 		SceneEndProcedures()
 		return
 	endif
 
 	RegisterForModEvent("ostim_thread_start", "NpcSceneStart")
 	RegisterForModEvent("ostim_thread_end", "NpcSceneEnd")
+	StoppedByWitness = false
+	KeptQuiet = false
 	DomClimaxes = 0
 	SubClimaxes = 0
 	StoppedBecauseSeen = false
@@ -215,17 +224,79 @@ Function SetupGroupScene(Actor[] actors, ObjectReference furnitureObj)
 EndFunction
 
 
-; while the scene runs: someone saw them -> OStim stops it (NpcSceneEnd then cleans up); otherwise look again in 2 s
+; everyone in this slot's scene
+Actor[] Function SceneActors()
+	if IsGroupScene && GroupActors
+		return GroupActors
+	endif
+	Actor[] a = new Actor[2]
+	a[0] = DomActor
+	a[1] = SubActor
+	return a
+EndFunction
+
+
+; 0.27.2 privacy, just before OStim starts: someone awake can see them -> they don't start (they walked to the bed, saw
+; someone, gave up)
+bool Function PrivacyBlocks()
+	if !ONpc.Privacy || IsFollowerScene || IsEnemyScene
+		return false	; followers and enemy camps don't mind (as in OStim NPCs)
+	endif
+	Actor[] who = SceneActors()
+	if ONPCR_Base.Privacy(who) == 2
+		Debug.Trace("ONPCR: " + DomActor.GetDisplayName() + " and partner don't start - " + ONPCR_Base.Witnesser(who) + " can see them")
+		ONPCR_Base.NoPrivacy(who)	; not again for about half an hour (no walking back and forth)
+		return true
+	endif
+	return false
+EndFunction
+
+
+Function SetQuiet(bool quiet)
+	Actor[] who = SceneActors()
+	int i = 0
+	while i < who.Length
+		if who[i]
+			if quiet
+				OActor.Mute(who[i])
+			else
+				OActor.Unmute(who[i])
+			endif
+		endif
+		i += 1
+	endwhile
+	KeptQuiet = quiet
+EndFunction
+
+
+; while the scene runs, every 2 s: you saw them ("stop when found") or someone else saw them (privacy) -> OStim stops it
+; (NpcSceneEnd cleans up); someone only within earshot -> they keep quiet, and relax again once nobody is in earshot
 Function WatchScene()
-	if !ONpc.StopWhenFound || !OThread.IsRunning(CurrentOStimSubthreadID)
+	if !OThread.IsRunning(CurrentOStimSubthreadID) || (!ONpc.StopWhenFound && !ONpc.Privacy)
 		Watching = false
 		return
 	endif
-	if IsFound()
+	if ONpc.StopWhenFound && IsFound()
 		StoppedBecauseSeen = true
 		Watching = false
 		OThread.Stop(CurrentOStimSubthreadID)
 		return
+	endif
+	if ONpc.Privacy && !IsEnemyScene
+		Actor[] who = SceneActors()
+		int p = ONPCR_Base.Privacy(who)
+		if p == 2
+			Debug.Trace("ONPCR: scene stopped - " + ONPCR_Base.Witnesser(who) + " saw " + DomActor.GetDisplayName())
+			StoppedByWitness = true
+			Watching = false
+			OThread.Stop(CurrentOStimSubthreadID)
+			return
+		elseif p == 1 && !KeptQuiet
+			Debug.Trace("ONPCR: " + DomActor.GetDisplayName() + " and partner keep quiet - " + ONPCR_Base.Witnesser(who) + " is within earshot")
+			SetQuiet(true)
+		elseif p == 0 && KeptQuiet
+			SetQuiet(false)
+		endif
 	endif
 	RegisterForSingleUpdate(2.0)
 EndFunction
@@ -300,7 +371,7 @@ EndFunction
 
 
 Function StartGroupScene()
-	if !CheckActorsStillValid()
+	if !CheckActorsStillValid() || PrivacyBlocks()
 		SceneEndProcedures()
 		return
 	endif
@@ -317,6 +388,8 @@ Function StartGroupScene()
 	RegisterForModEvent("ostim_thread_start", "NpcSceneStart")
 	RegisterForModEvent("ostim_thread_end", "NpcSceneEnd")
 	StoppedBecauseSeen = false
+	StoppedByWitness = false
+	KeptQuiet = false
 	RegisterForModEvent("ostim_actor_orgasm", "NpcActorOrgasm")
 	CurrentOStimSubthreadID = OThreadBuilder.Start(BuilderID)
 	if CurrentOStimSubthreadID < 0

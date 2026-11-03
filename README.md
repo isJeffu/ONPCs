@@ -3,7 +3,7 @@
 A GPL-3.0 successor to **[OStim NPCs - NPC Sex Lives Improved](https://www.nexusmods.com/skyrimspecialedition/mods/82888)** by **Aietos**,
 rebuilt around an SKSE plugin. This is **not** an official update of Aietos's mod.
 
-> **Status: 0.1.1-alpha.** Expect bugs. Use a new game or a test save.
+> **Status: 0.1.2-alpha.** Expect bugs. Use a new game or a test save.
 
 ## What it does
 At night, couples who already belong together - spouses, fiancees and courting couples from the game's own records - may have
@@ -15,6 +15,7 @@ an OStim scene when they are near you, in their own bed if one is free. No rando
   walk to the bed together.
 - Furniture choice, walking to the bed, followers and enemy camps, "stop when seen", Beeing Female period skip and the
   match-maker spells, as in OStim NPCs.
+- **Privacy:** nobody awake may see them (a scene stops if someone does); someone within earshot means they keep quiet. Their own private bed first.
 - A short break after each scene; a frustrated couple may try again sooner than a fulfilled one.
 - A scene log (`ONPCs_SceneLog.log`, next to the SKSE logs) records how each scene went.
 

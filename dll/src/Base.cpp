@@ -945,6 +945,7 @@ namespace ONPCR::Base
 				length = std::format("{:.0f} game min ({} s)", (today - open->startDay) * 24.0f * 60.0f, realSec);
 			}
 			const char* cause = a_cause == 1                       ? "stopped: they were seen" :
+			                    a_cause == 2                       ? "stopped: someone else saw them" :
 			                    (a_xClimax > 0 && a_yClimax > 0)   ? "both finished" :
 			                    (a_xClimax > 0 || a_yClimax > 0)   ? "one finished, OStim ended it" :
 			                                                         "ended without a climax (OStim's NPC timer or another mod)";
@@ -1121,6 +1122,164 @@ namespace ONPCR::Base
 			return vm->DispatchMethodCall(handle, "Actor", "PathToReference", args, cb);
 		}
 
+		// ---- privacy (0.27.2, user 3 Nov): couples don't want to be seen; within earshot they keep quiet -------------------
+		// a witness = an awake person (not in the scene, not the player - "stop when seen" handles you) near the spot; children
+		// count like adults. Seen = a clear line of sight from them to anyone in the scene or to the bed, at any distance (only
+		// actors the game runs near you are looked at). Heard = within the earshot setting, sight or not (walls don't stop it).
+		// not a witness: asleep, knocked out, bleeding out, in a kill move, a mannequin or anything without AI, your own
+		// followers (they stand next to you - "stop when found" decides for you and them), someone in an OStim scene
+		bool NotAWitness(RE::Actor* a_actor)
+		{
+			auto*      state = a_actor->AsActorState();
+			const auto ss = state ? state->GetSitSleepState() : RE::SIT_SLEEP_STATE::kNormal;
+			if (ss == RE::SIT_SLEEP_STATE::kIsSleeping || ss == RE::SIT_SLEEP_STATE::kWaitingForSleepAnim) {
+				return true;
+			}
+			if ((state && (state->IsUnconscious() || state->IsBleedingOut())) || a_actor->IsInKillMove() || !a_actor->IsAIEnabled() ||
+				a_actor->IsPlayerTeammate()) {
+				return true;
+			}
+			if (auto* race = a_actor->GetRace(); race && race->GetFormEditorID() && std::string_view(race->GetFormEditorID()) == "ManakinRace") {
+				return true;
+			}
+			return InSceneNow(a_actor);
+		}
+
+		constexpr float kOutdoorSight = 4000.0f;   // units (~57 m): beyond this nobody outdoors counts as watching
+		constexpr float kNoPrivacyWait = 0.02f;    // game days (~30 min): a couple that gave up for lack of privacy waits this long
+		constexpr std::size_t kMaxBedsLooked = 8;  // the nearest free beds checked for privacy (line-of-sight checks are not free)
+
+		// 0 nobody, 1 someone within earshot, 2 someone can see; a_who = that person
+		int Witness(const std::vector<RE::TESObjectREFR*>& a_spots, const std::vector<RE::Actor*>& a_exclude, RE::Actor** a_who)
+		{
+			auto* lists = RE::ProcessLists::GetSingleton();
+			auto* player = RE::PlayerCharacter::GetSingleton();
+			if (!lists || a_spots.empty()) {
+				return 0;
+			}
+			const float earshot = std::max(0.0f, Settings::Get().earshot);
+			int         result = 0;
+			for (auto& h : lists->highActorHandles) {
+				auto  ptr = h.get();
+				auto* a = ptr.get();
+				if (!a || a == player || a->IsDead() || a->IsDisabled() || !a->Is3DLoaded() || !a->HasKeywordString("ActorTypeNPC") ||
+					std::ranges::find(a_exclude, a) != a_exclude.end() || NotAWitness(a)) {
+					continue;
+				}
+				for (auto* spot : a_spots) {
+					if (!spot) {
+						continue;
+					}
+					auto*      cell = spot->GetParentCell();
+					const bool indoors = cell && cell->IsInteriorCell();
+					if (indoors && cell != a->GetParentCell()) {
+						continue;  // indoors: only people in the same building
+					}
+					if (!indoors && a->GetPosition().GetDistance(spot->GetPosition()) > kOutdoorSight) {
+						continue;  // outdoors: too far to make anything out
+					}
+					bool unused = false;
+					if (a->HasLineOfSight(spot, unused)) {
+						if (a_who) {
+							*a_who = a;
+						}
+						return 2;
+					}
+					if (result == 0 && earshot > 0.0f && a->GetPosition().GetDistance(spot->GetPosition()) <= earshot) {
+						result = 1;
+						if (a_who) {
+							*a_who = a;
+						}
+					}
+				}
+			}
+			return result;
+		}
+
+		// Papyrus: 0 private, 1 overheard (keep quiet), 2 seen (stop / don't start)
+		std::int32_t Privacy(RE::StaticFunctionTag*, std::vector<RE::Actor*> a_actors)
+		{
+			std::erase(a_actors, nullptr);
+			std::vector<RE::TESObjectREFR*> spots(a_actors.begin(), a_actors.end());
+			return Witness(spots, a_actors, nullptr);
+		}
+
+		// Papyrus: the name of whoever made Privacy() answer 1 or 2 (for the logs), "" if nobody
+		RE::BSFixedString Witnesser(RE::StaticFunctionTag*, std::vector<RE::Actor*> a_actors)
+		{
+			std::erase(a_actors, nullptr);
+			std::vector<RE::TESObjectREFR*> spots(a_actors.begin(), a_actors.end());
+			RE::Actor* who = nullptr;
+			Witness(spots, a_actors, &who);
+			return who && who->GetName() ? who->GetName() : "";
+		}
+
+		// Papyrus: the best free bed for them - nobody may see it; their own (or a partner's, or their home's) beats a
+		// stranger's, out of earshot beats having to keep quiet. None = no private bed.
+		RE::TESObjectREFR* PickPrivateBed(RE::StaticFunctionTag*, std::vector<RE::Actor*> a_actors, std::vector<RE::TESObjectREFR*> a_beds)
+		{
+			std::erase(a_actors, nullptr);
+			std::erase(a_beds, nullptr);
+			if (a_actors.empty()) {
+				return nullptr;
+			}
+			// the nearest few only
+			const auto from = a_actors.front()->GetPosition();
+			std::ranges::sort(a_beds, [&](auto* a, auto* b) { return a->GetPosition().GetDistance(from) < b->GetPosition().GetDistance(from); });
+			if (a_beds.size() > kMaxBedsLooked) {
+				a_beds.resize(kMaxBedsLooked);
+			}
+			RE::TESObjectREFR* best = nullptr;
+			int                bestScore = -1;
+			for (auto* bed : a_beds) {
+				if (!bed) {
+					continue;
+				}
+				const int w = Witness({ bed }, a_actors, nullptr);
+				if (w == 2) {
+					continue;
+				}
+				bool own = false;
+				for (auto* m : a_actors) {
+					if (bed->IsAnOwner(m, true, true)) {
+						own = true;
+						break;
+					}
+					if (auto* cell = bed->GetParentCell(); cell && cell->IsInteriorCell()) {
+						auto* owner = cell->GetOwner();
+						if (owner && (owner == m->GetActorBase() || (owner->Is(RE::FormType::Faction) && m->IsInFaction(owner->As<RE::TESFaction>())))) {
+							own = true;
+							break;
+						}
+					}
+				}
+				const int score = (own ? 2 : 0) + (w == 0 ? 1 : 0);
+				if (score > bestScore) {
+					bestScore = score;
+					best = bed;
+				}
+			}
+			if (best) {
+				SKSE::log::info("Base: private bed {:08X} ({}{})", best->GetFormID(), bestScore >= 2 ? "their own" : "not theirs",
+					bestScore % 2 ? ", out of earshot" : ", must keep quiet");
+			}
+			return best;
+		}
+
+		// Papyrus: they walked to the spot and someone could see them - they give up for now; nobody here starts again for
+		// about half an hour (uses the same break the base keeps after a scene)
+		void NoPrivacy(RE::StaticFunctionTag*, std::vector<RE::Actor*> a_actors)
+		{
+			const float today = Today();
+			const float breakDays = std::max(0.0f, Settings::Get().coupleCooldownDays);
+			std::scoped_lock lock{ mutex };
+			for (auto* a : a_actors) {
+				if (a) {
+					lastSceneOf[a->GetFormID()] = today - breakDays + kNoPrivacyWait;
+				}
+			}
+		}
+
 		struct OpenGroup
 		{
 			std::vector<RE::FormID>               ids;
@@ -1199,7 +1358,7 @@ namespace ONPCR::Base
 			for (const auto& [a, c] : members) {
 				counts += std::format("{}{} {}", counts.empty() ? "" : ", ", a->GetName(), c);
 			}
-			const char* cause = a_cause == 1 ? "stopped: they were seen" : finished == static_cast<int>(members.size()) ? "everyone finished" :
+			const char* cause = a_cause == 1 ? "stopped: they were seen" : a_cause == 2 ? "stopped: someone else saw them" : finished == static_cast<int>(members.size()) ? "everyone finished" :
 			                    finished > 0                                                                    ? "some finished, OStim ended it" :
 			                                                                                                      "ended without a climax (OStim's NPC timer or another mod)";
 			WriteLog(std::format("  end:   {}, climaxes: {} - {}", length, counts, cause));
@@ -1232,6 +1391,10 @@ namespace ONPCR::Base
 			a_vm->RegisterFunction("WalkTo", kScript, WalkTo);
 			a_vm->RegisterFunction("GroupSceneStarted", kScript, GroupSceneStarted);
 			a_vm->RegisterFunction("GroupSceneEnded", kScript, GroupSceneEnded);
+			a_vm->RegisterFunction("Privacy", kScript, Privacy);
+			a_vm->RegisterFunction("Witnesser", kScript, Witnesser);
+			a_vm->RegisterFunction("PickPrivateBed", kScript, PickPrivateBed);
+			a_vm->RegisterFunction("NoPrivacy", kScript, NoPrivacy);
 			return true;
 		}
 	}

@@ -8,7 +8,7 @@ namespace ONPCR::Settings
 	{
 		// [General]
 		bool disabled{ false };                       // master switch: no automatic scenes, no polling
-		bool allowActiveFollowers{ true };            // followers have scenes between themselves
+		bool allowActiveFollowers{ false };           // followers have scenes between themselves (0.27.2: off by default - user 3 Nov)
 		bool allowPlayersPartners{ false };           // the player's lover / spouse may be picked
 		bool activeFollowersEngageOtherNPCs{ false }; // followers may pair with other NPCs
 		bool allowElderRace{ false };                 // elders may be picked
@@ -17,6 +17,10 @@ namespace ONPCR::Settings
 		bool travelToLocation{ true };                // NPCs walk to the furniture first
 		bool enemiesTravelToLocation{ false };        // enemies walk to the furniture first
 		bool sceneAmmoOff{ true };                    // 0.20.2: arrows/bolts off in every OStim scene, back on after
+
+		// [Privacy] (0.27.2)
+		bool  privacy{ true };                        // couples don't start (or stop) when an awake person can see them; within earshot they keep quiet
+		float earshot{ 600.0f };                      // how far someone can hear them, sight or not (units; ~8.5 m); 0 = only being seen counts
 
 		// [Furniture]
 		bool enableFurniture{ true };                 // use furniture at all

@@ -737,12 +737,20 @@ namespace ONPCR::Menu
 			Toggle("Arrows off in scenes", draft.sceneAmmoOff, "SceneAmmoOff",
 				"Arrows and bolts come off in every OStim scene (yours too) and go back on after. Followers otherwise put their quiver straight back on.");
 
+			Heading("Privacy");
+			Toggle("Couples want privacy", draft.privacy, "Privacy",
+				"Nobody awake may see them: a scene does not start while someone (a child or an adult) has a clear line of sight to them or their bed, and stops when someone does. Within earshot but out of sight they go ahead and keep quiet (muted). They pick their own or their partner's bed nobody can see first. You are handled by 'Scenes end when found' above.");
+			Im::BeginDisabled(!draft.privacy);
+			SliderF("Earshot", draft.earshot, 0.0f, 2000.0f, "%.0f", "Earshot",
+				"How far away someone hears them, through walls too (game units; 600 is about 8.5 m, a room or two). 0 = only being seen counts.");
+			Im::EndDisabled();
+
 
 			Heading("Followers and enemies");
 			Toggle("Followers have scenes between themselves", draft.allowActiveFollowers, "AllowActiveFollowers",
-				"Two of your followers may pair up at night.");
+				"Off by default. On: two of your followers who are a couple (married, engaged or courting) may have a scene at night - never two followers who are just travelling together.");
 			Toggle("Followers may pair with other NPCs", draft.activeFollowersEngageOtherNPCs, "ActiveFollowersEngageOtherNPCs",
-				"A follower may be picked as a partner for a nearby NPC.");
+				"Off by default. On: a follower may have a scene with their own partner who is not in your party (still only real couples).");
 			Toggle("Allow the player's partner", draft.allowPlayersPartners, "AllowPlayersPartners",
 				"Off = your lover or spouse is never picked for an NPC scene.");
 			Toggle("Allow elders", draft.allowElderRace, "AllowElderRace",

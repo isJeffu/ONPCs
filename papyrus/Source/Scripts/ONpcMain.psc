@@ -60,6 +60,7 @@ bool property NoScenesInGuilds auto
 bool property NoScenesInInns auto
 
 bool property SettingCellChange auto
+bool property Privacy = true auto	; 0.27.2: couples want privacy (read from the DLL; no plugin value)
 
 ; ============================================================
 ; OStim NPCs Reforged - relationship settings (Relations Finder + Lover's Ledger)
@@ -405,7 +406,7 @@ EndFunction
 bool Function StartGroup(ONpcSubthread SubthreadToUse, Actor[] group)
 	ObjectReference furnitureRef
 	if EnableFurniture
-		furnitureRef = FindEmptyFurniture(group[0], group[1], group[2], group.Length)
+		furnitureRef = FindEmptyFurniture(group[0], group[1], group[2], group.Length, group)
 		if (ScenesStartIn == AnyFurniture || ScenesStartIn == BedsOnly) && !furnitureRef
 			if !(IsEnemy(group[0]) && IsEnemy(group[1]) && EnemiesIgnoreScenesStartInRules)
 				return false
@@ -579,7 +580,7 @@ EndFunction
 ; Furniture selection
 ; ============================================================
 
-ObjectReference Function FindEmptyFurniture(Actor Dom, Actor Sub = None, Actor Third = None, int ActorCount = 2)
+ObjectReference Function FindEmptyFurniture(Actor Dom, Actor Sub = None, Actor Third = None, int ActorCount = 2, Actor[] Members = None)
 	ObjectReference[] Furnitures = OFurniture.FindFurniture(ActorCount, Dom, (OStim.FurnitureSearchDistance + 15) * 100.0, 96)
 
 	int i = Furnitures.Length
@@ -587,6 +588,49 @@ ObjectReference Function FindEmptyFurniture(Actor Dom, Actor Sub = None, Actor T
 	bool useFurniture
 
 	ObjectReference currentFurniture
+
+	; 0.27.2 privacy: every free bed is a candidate, the DLL picks the private one (their own first); none private = none.
+	; Followers and enemy camps don't mind (as in OStim NPCs)
+	bool caresAboutPrivacy = Privacy && !IsFollower(Dom) && !(Sub && IsFollower(Sub)) && !(Third && IsFollower(Third)) && !(IsEnemy(Dom) && (!Sub || IsEnemy(Sub)))
+	if caresAboutPrivacy && Members
+		int mi = 0
+		while mi < Members.Length
+			if Members[mi] && IsFollower(Members[mi])
+				caresAboutPrivacy = false
+			endif
+			mi += 1
+		endwhile
+	endif
+	if caresAboutPrivacy
+		ObjectReference[] free = PapyrusUtil.ObjRefArray(0)
+		While i > 0
+			i -= 1
+			currentFurniture = Furnitures[i]
+			if JArray.FindForm(FurnituresInUse, currentFurniture) == -1
+				useFurniture = !((FurnitureOnlyBeds || ScenesStartIn == BedsOnly) && !IsFurnitureBed(currentFurniture))
+				if useFurniture && !TMS_IsFurnitureOccupiedByOther(currentFurniture, Dom, Sub, Third)
+					free = PapyrusUtil.PushObjRef(free, currentFurniture)
+				endif
+			endif
+		EndWhile
+		if !Members
+			Members = PapyrusUtil.ActorArray(1, Dom)
+			if Sub
+				Members = PapyrusUtil.PushActor(Members, Sub)
+			endif
+			if Third
+				Members = PapyrusUtil.PushActor(Members, Third)
+			endif
+		endif
+		ObjectReference pick = None
+		if free.Length
+			pick = ONPCR_Base.PickPrivateBed(Members, free)
+		endif
+		if pick
+			JArray.addForm(FurnituresInUse, pick)
+		endif
+		return pick
+	endif
 
 	While i > 0
 		i -= 1
@@ -859,6 +903,7 @@ Function ReloadReforgedSettings()
 	ScanFreq = ONPCR_Settings.GetInt("ScanFreq", ScanFreq as int) as float
 	; 0.26.0: the pair weights, minimum relationship, stray chance, history weight and stranger score are no longer read here -
 	; the DLL picks the couples (the weights are its on/off per pairing); their properties stay declared for old saves
+	Privacy = ONPCR_Settings.GetBool("Privacy", true) && ONPCR_Settings.GetVersion() >= 23
 	UseRelationsFinderFamily = ONPCR_Settings.GetBool("UseRelationsFinderFamily", UseRelationsFinderFamily)
 	UseLoversLedger = ONPCR_Settings.GetBool("UseLoversLedger", UseLoversLedger)
 	; advanced

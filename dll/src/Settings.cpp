@@ -24,6 +24,8 @@ namespace ONPCR::Settings
 			B("General", "TravelToLocation", &Data::travelToLocation, "; NPCs walk to the furniture first"),
 			B("General", "EnemiesTravelToLocation", &Data::enemiesTravelToLocation, "; enemies walk to the furniture first"),
 			B("General", "SceneAmmoOff", &Data::sceneAmmoOff, "; arrows and bolts come off in every OStim scene and go back on after"),
+			B("Privacy", "Privacy", &Data::privacy, "; couples want privacy: nobody awake may see them (or they stop); someone within earshot = they keep quiet; their own private bed first"),
+			F("Privacy", "Earshot", &Data::earshot, "; how far away someone hears them, through walls too (units, 600 = about 8.5 m); 0 = only being seen counts"),
 
 			B("Furniture", "EnableFurniture", &Data::enableFurniture, "; use furniture at all"),
 			B("Furniture", "FurnitureOnlyBeds", &Data::furnitureOnlyBeds, "; only beds count as furniture"),
