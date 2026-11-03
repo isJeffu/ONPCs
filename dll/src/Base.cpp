@@ -141,6 +141,7 @@ namespace ONPCR::Base
 		// 0.26.0 phase 2: OStim's own thread API (C++, no Papyrus) - who is in a scene right now. OStim sends its thread events
 		// for the PLAYER's scenes only, so breaks after a scene come from our own scene ends (SceneEnded), not from OStim
 		OstimNG_API::Thread::IThreadInterface* ostimThreads = nullptr;
+		std::string                            missingRequirements;  // set once at kDataLoaded; non-empty = no scenes start
 		std::unordered_map<RE::FormID, float>    lastSceneOf;  // actor ref -> game day their last Reforged scene ended
 		constexpr float                          kArousalFresh = 0.05f;  // game days (~1 h): an older arousal value counts as unknown
 		constexpr float                          kAskTimeout = 0.02f;    // game days (~30 min): no Lover's Ledger answer = never together
@@ -618,7 +619,7 @@ namespace ONPCR::Base
 			std::vector<RE::Actor*> out;
 			auto*                   player = RE::PlayerCharacter::GetSingleton();
 			auto*                   lists = RE::ProcessLists::GetSingleton();
-			if (!player || !lists || a_max <= 0) {
+			if (!player || !lists || a_max <= 0 || !missingRequirements.empty()) {
 				return out;
 			}
 			const auto  s = Settings::Get();
@@ -1001,7 +1002,7 @@ namespace ONPCR::Base
 			std::vector<RE::Actor*> out;
 			auto*                   player = RE::PlayerCharacter::GetSingleton();
 			const auto              s = Settings::Get();
-			if (!player || !s.groupScenes) {
+			if (!player || !s.groupScenes || !missingRequirements.empty()) {
 				return out;
 			}
 			const int   maxSize = std::clamp(std::min<int>(a_maxSize, s.maxGroupSize), 3, 5);
@@ -1258,13 +1259,39 @@ namespace ONPCR::Base
 			SKSE::log::info("Base: OStim {} thread API {}", version->string("."), ostimThreads ? "connected" : "not available");
 		}
 		(void)ArousalSource();  // logs which arousal source is used
+
+		// 0.1.0-alpha: hard requirements (user 3 Nov: the base must not run without Relations Finder and Lover's Ledger)
+		std::string missing;
+		const auto  need = [&](const wchar_t* a_dll, const char* a_name) {
+			if (!GetModuleHandleW(a_dll)) {
+				missing += missing.empty() ? a_name : std::string(", ") + a_name;
+			}
+		};
+		if (!version || *version < REL::Version{ 7, 5, 1, 0 }) {
+			missing = "OStim Standalone 7.5.1+";
+		}
+		need(L"RelationsFinder.dll", "Relations Finder");
+		need(L"LoversLedger.dll", "Lover's Ledger");
+		need(L"PapyrusUtil.dll", "PapyrusUtil");
+		need(L"JContainers64.dll", "JContainers");
+		missingRequirements = missing;
+		if (missing.empty()) {
+			SKSE::log::info("Base: every requirement found");
+		} else {
+			SKSE::log::error("Base: missing {} - no NPC scenes will start", missing);
+		}
 	}
 
 	void OnPostLoad()
 	{
-		std::scoped_lock lock{ mutex };
-		if (!refMapBuilt) {
-			BuildRefMap();
+		{
+			std::scoped_lock lock{ mutex };
+			if (!refMapBuilt) {
+				BuildRefMap();
+			}
+		}
+		if (!missingRequirements.empty()) {
+			RE::SendHUDMessage::ShowHUDMessage(std::format("ONPCs: missing {} - NPC scenes are off.", missingRequirements).c_str());
 		}
 	}
 

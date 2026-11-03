@@ -14,5 +14,5 @@ namespace Plugin
 
 	inline constexpr auto NAME = "@PROJECT_NAME@"sv;
 	inline constexpr auto DISPLAY_NAME = "ONPCs"sv;
-	inline constexpr auto PUBLIC_VERSION = "0.1.0-alpha"sv;  // the public release name; VERSION above is the internal build
+	inline constexpr auto PUBLIC_VERSION = "0.1.1-alpha"sv;  // the public release name; VERSION above is the internal build
 }

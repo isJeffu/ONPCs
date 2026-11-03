@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.1.0-alpha (unreleased)
+## 0.1.1-alpha
+- Relations Finder and Lover's Ledger are required: without them (or without OStim 7.5.1+, PapyrusUtil or JContainers) no scenes start, the SKSE log names what is missing and a message says so after loading.
+- README: every requirement links to its Nexus page.
+
+## 0.1.0-alpha (3 Nov 2026)
 First public build of the base. Compared with OStim NPCs 2.1.0:
 - The scan, partner choice, arousal and scene bookkeeping run in an SKSE plugin instead of Papyrus.
 - Only known couples (spouses, fiancees, courting) are paired; never strangers or relatives; a past scene alone never makes a couple.

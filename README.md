@@ -3,7 +3,7 @@
 A GPL-3.0 successor to **[OStim NPCs - NPC Sex Lives Improved](https://www.nexusmods.com/skyrimspecialedition/mods/82888)** by **Aietos**,
 rebuilt around an SKSE plugin. This is **not** an official update of Aietos's mod.
 
-> **Status: 0.1.0-alpha.** Expect bugs. Use a new game or a test save.
+> **Status: 0.1.1-alpha.** Expect bugs. Use a new game or a test save.
 
 ## What it does
 At night, couples who already belong together - spouses, fiancees and courting couples from the game's own records - may have
@@ -19,12 +19,16 @@ an OStim scene when they are near you, in their own bed if one is free. No rando
 - A scene log (`ONPCs_SceneLog.log`, next to the SKSE logs) records how each scene went.
 
 ## Requirements
-- Skyrim SE / AE, [SKSE](https://skse.silverlock.org/), Address Library for SKSE Plugins
-- OStim Standalone 7.5.1 or newer
-- PapyrusUtil, JContainers
-- SKSE Menu Framework (settings page; without it the INI still works)
+- Skyrim SE / AE, [SKSE](https://skse.silverlock.org/), [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
+- [OStim Standalone](https://www.nexusmods.com/skyrimspecialedition/mods/98163) 7.5.1 or newer
+- [Relations Finder](https://www.nexusmods.com/skyrimspecialedition/mods/158980) (who is family)
+- [Lover's Ledger](https://www.nexusmods.com/skyrimspecialedition/mods/158983) (when a couple was last together)
+- [PapyrusUtil](https://www.nexusmods.com/skyrimspecialedition/mods/13048), [JContainers](https://www.nexusmods.com/skyrimspecialedition/mods/16495)
+- [SKSE Menu Framework](https://www.nexusmods.com/skyrimspecialedition/mods/120352) (settings page; without it the INI still works)
 
-Optional: OSL Aroused or SexLab Aroused, Lover's Ledger, Relations Finder, Beeing Female.
+If one of the required mods is missing, ONPCs starts no scenes and says which one after loading.
+
+Optional: [OSL Aroused](https://www.nexusmods.com/skyrimspecialedition/mods/65454) or SexLab Aroused, [Beeing Female NG](https://www.nexusmods.com/skyrimspecialedition/mods/168434).
 
 ## Install
 1. **Uninstall OStim NPCs** - ONPCs replaces it (it uses the same script names).
