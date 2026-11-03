@@ -1,0 +1,4 @@
+dll/out/
+build/
+*.zip
+*.log

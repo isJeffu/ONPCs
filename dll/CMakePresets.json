@@ -1,0 +1,22 @@
+{
+	"version": 3,
+	"configurePresets": [
+		{
+			"name": "skyrim",
+			"displayName": "Skyrim SE/AE (VS 2026 Build Tools)",
+			"binaryDir": "${sourceDir}/out/skyrim",
+			"generator": "Visual Studio 18 2026",
+			"architecture": { "strategy": "set", "value": "x64" },
+			"cacheVariables": {
+				"CMAKE_TOOLCHAIN_FILE": { "type": "STRING", "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" },
+				"VCPKG_TARGET_TRIPLET": { "type": "STRING", "value": "x64-windows-static-md" },
+				"CMAKE_MSVC_RUNTIME_LIBRARY": { "type": "STRING", "value": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL" },
+				"CMAKE_CXX_FLAGS": "/EHsc /MP"
+			}
+		}
+	],
+	"buildPresets": [
+		{ "name": "skyrim-release", "configurePreset": "skyrim", "configuration": "Release" },
+		{ "name": "skyrim-debug", "configurePreset": "skyrim", "configuration": "Debug" }
+	]
+}
