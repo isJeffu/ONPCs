@@ -53,7 +53,8 @@ switches their features on only when their plugin is installed.
 
 ## Licence and credits
 GPL-3.0-or-later (see `LICENSE`).
-- **Aietos** - OStim NPCs, which this is forked from.
+- **Aietos** - OStim NPCs, which this is forked from (licensed GPL-3.0 by Aietos: "You can do anything with this mod as long as you respect the license." - OStim NPCs page, Permissions and credits).
+- Aietos's own credits for OStim NPCs, which ONPCs carries forward: Sairion350 and 321mahra (ONights, OBetterNights), VersuchDrei and KannonFodder (testing and code help), and the OStim team.
 - The furniture guard included with OStim NPCs 2.1.0 (source in `third-party/`).
 - The OStim team - OStim Standalone and its API (`dll/include/ThirdParty/OStimNG`, GPL-3.0).
 - [CommonLibSSE-NG](https://github.com/alandtse/CommonLibSSE-NG) - GPL-3.0 with modding exceptions.
