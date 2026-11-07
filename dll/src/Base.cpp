@@ -342,17 +342,42 @@ namespace ONPCR::Base
 			return ladder != Bond::kNone ? ladder : record;
 		}
 
-		// a living spouse / courting partner other than a_except, from the game's records or Reforged's couples (caller holds
-		// the mutex); a widow / widower is free (logged once per session)
-		bool CommittedElsewhere(RE::Actor* a_actor, RE::Actor* a_except)
+		// how committed a bond is: 0 casual, 1 courting, 2 engaged, 3 married
+		int Level(Bond a_bond)
 		{
+			switch (a_bond) {
+			case Bond::kSpouse:
+				return 3;
+			case Bond::kEngaged:
+				return 2;
+			case Bond::kCourting:
+				return 1;
+			default:
+				return 0;
+			}
+		}
+
+		// the strongest living commitment a_actor has to someone other than a_except (0 none, 1 courting, 2 engaged, 3 married),
+		// from the game's records or Reforged's couples (caller holds the mutex); a widow / widower is free (logged once per session)
+		int CommitmentElsewhere(RE::Actor* a_actor, RE::Actor* a_except)
+		{
+			int best = 0;
 			if (Settings::Installed(Settings::Module::Relationships) && Ladder::IsCommittedToOther(a_actor, a_except)) {
-				return true;
+				switch (Ladder::GetPartnerStage(a_actor)) {
+				case Ladder::Stage::Married:
+					return 3;
+				case Ladder::Stage::Engaged:
+					best = 2;
+					break;
+				default:
+					best = 1;
+					break;
+				}
 			}
 			auto* npc = a_actor->GetActorBase();
 			auto* except = a_except->GetActorBase();
 			if (!npc || !npc->relationships) {
-				return false;
+				return best;
 			}
 			for (auto* rel : *npc->relationships) {
 				if (!rel || !rel->assocType) {
@@ -371,13 +396,27 @@ namespace ONPCR::Base
 					continue;  // that marriage / courtship ended in Reforged's records
 				}
 				if (IsAround(other)) {
-					return true;
+					best = std::max(best, assoc == kSpouse ? 3 : 1);
+					if (best == 3) {
+						return best;
+					}
+					continue;
 				}
 				if (assoc == kSpouse && widowedLogged.insert(npc->GetFormID()).second) {
 					SKSE::log::info("Base: {} is widowed ({} is gone)", npc->GetName(), other->GetName());
 				}
 			}
-			return false;
+			return best;
+		}
+
+		// 0.1.5 (user 7 Nov, "cheating will come later"): the base is faithful - a pair is blocked when either of them is more
+		// committed to someone else than to this partner (a married NPC courting someone else: only the spouse; casual: only
+		// when neither has anyone). Two spouses (an orc chief's wives) stay fine. Caller holds the mutex.
+		bool CommittedAbove(RE::Actor* a_x, RE::Actor* a_y, Bond a_bond)
+		{
+			const int level = Level(a_bond);
+			const int floor = a_bond == Bond::kCasual ? 0 : level;  // casual: any commitment elsewhere blocks
+			return CommitmentElsewhere(a_x, a_y) > floor || CommitmentElsewhere(a_y, a_x) > floor;
 		}
 
 		bool LedgerPair(RE::TESNPC* a_x, RE::TESNPC* a_y)
@@ -717,8 +756,8 @@ namespace ONPCR::Base
 						if (bond == Bond::kNone || bond == Bond::kFamily || bond == Bond::kEnded) {
 							continue;
 						}
-						if (bond == Bond::kCasual && (CommittedElsewhere(x, y) || CommittedElsewhere(y, x))) {
-							continue;  // casual only when neither has a living partner elsewhere (the base is faithful)
+						if (CommittedAbove(x, y, bond)) {
+							continue;  // the base is faithful: nobody pairs past a stronger commitment elsewhere (0.1.5: courting too)
 						}
 						// a short break after their last scene together (Lover's Ledger, asked once per session; unknown = wait a scan)
 						const auto key = PairKey(xb->GetFormID(), yb->GetFormID());
@@ -1092,6 +1131,9 @@ namespace ONPCR::Base
 						const Bond b = BondOf(hub, m);
 						if (b != Bond::kSpouse && b != Bond::kEngaged && b != Bond::kCourting) {
 							continue;
+						}
+						if (CommittedAbove(hub, m, b)) {
+							continue;  // 0.1.5: a married hub's outside courtship (or a partner married elsewhere) stays out of the group
 						}
 						const float am = ArousalNow(m, today);
 						if (am < 0.0f || StateOf(am) < partnerState || Ladder::IsMourning(m->GetActorBase()->GetFormID(), now)) {

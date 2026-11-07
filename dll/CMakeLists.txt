@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 3.21)
 
 project(
 	ONPCs
-	VERSION 0.27.4
+	VERSION 0.27.5
 	LANGUAGES CXX
 )
 

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.5-alpha
+- Faithful couples: a married or engaged NPC only has scenes with their own partner. A game record that says they are also courting someone else no longer makes a pair. The same goes for groups: a hub's spouse and an outside courting partner never share a group scene. Cheating comes later with the relationships module.
+
 ## 0.1.4-alpha
 - No scene in the open: when a couple (or group) that wants privacy finds no private bed, there is no scene, whatever "Scenes start in" says; a bed taken at the last moment no longer falls back to a scene where they stand.
 - "Scenes end when found" checks every member of a group scene, not just the first.
