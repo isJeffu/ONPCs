@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3-alpha
+- **One scene a night** (new setting, on by default): each NPC has at most one scene a night. Off = after a short break, their arousal decides whether they go again (the 0.1.2 behaviour).
+- NPCs a running quest is driving (a quest or alias package: waiting for you, escorting, a job) are no longer picked for scenes.
+- A sleeping couple now picks a private bed too (their own first, nobody can see it) before anyone is woken; none private = they sleep on.
+- Breaks after a scene (each NPC's, each couple's, the half-hour wait after giving up for lack of privacy, and the built-in desire's last fulfilling scene) are kept in the save, so a reload no longer lets a couple start again at once.
+
 ## 0.1.2-alpha
 - **Privacy.** A couple doesn't start, or stops, when anyone awake (a child or an adult) has a clear line of sight to them. Someone only within earshot (setting, ~8.5 m, through walls) doesn't stop them: they keep quiet (muted) and relax when nobody is in earshot. They pick a free bed nobody can see, their own or their partner's first, out of earshot before having to keep quiet. A couple that gives up waits about half an hour. Followers and enemy camps don't mind, as in OStim NPCs. Your own followers and mannequins never count as watching. Settings: Couples want privacy, Earshot.
 - Follower scenes are now **off by default** (Followers have scenes between themselves). When on, followers still only pair with their real partners (married, engaged, courting) - never with whoever is around, as the original did.

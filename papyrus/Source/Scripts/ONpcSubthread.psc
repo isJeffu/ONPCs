@@ -65,15 +65,17 @@ Event NpcSceneStart(string eventname, string strarg, float numarg, form sender)
 	if numarg == CurrentOStimSubthreadID
 		ONpc.JealousyStart(DomActor, SubActor)
 		ONpc.JealousyStart(SubActor, DomActor)
-		; the old "one scene a night" list, only for the pre-0.26.0 scan: with the DLL, a short break and their arousal state
-		; decide whether they go again (a frustrated or eager couple may, a fulfilled one waits)
-		if ONPCR_Settings.GetVersion() < 21
-			JArray.addForm(ONpc.NPCsHadSexThisNight, DomActor)
-			JArray.addForm(ONpc.NPCsHadSexThisNight, SubActor)
-
-			if ThirdActor
-				JArray.addForm(ONpc.NPCsHadSexThisNight, ThirdActor)
-			endif
+		; 0.1.3: "one scene a night" (default, user 7 Nov). Off (OneScenePerNight = false): a short break, then their arousal
+		; state decides whether they go again (a frustrated or eager couple may, a fulfilled one waits)
+		if (ONPCR_Settings.GetVersion() < 21 || ONpc.OneScenePerNight) && ONpc.JArraysCreated
+			Actor[] had = SceneActors()
+			int hi = 0
+			while hi < had.Length
+				if had[hi]
+					JArray.addForm(ONpc.NPCsHadSexThisNight, had[hi])
+				endif
+				hi += 1
+			endwhile
 		endif
 
 		if !IsFollowerScene && (ONpc.StopWhenFound || (ONpc.Privacy && !IsEnemyScene))

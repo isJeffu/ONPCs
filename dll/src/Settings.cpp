@@ -20,6 +20,7 @@ namespace ONPCR::Settings
 			B("General", "ActiveFollowersEngageOtherNPCs", &Data::activeFollowersEngageOtherNPCs, "; followers may pair with other NPCs"),
 			B("General", "AllowElderRace", &Data::allowElderRace, "; elders may be picked"),
 			B("General", "AllowCommonEnemies", &Data::allowCommonEnemies, "; bandits, warlocks etc. have scenes in their camps"),
+			B("General", "OneScenePerNight", &Data::oneScenePerNight, "; 0.1.3: each NPC has at most one scene a night (false = after the short break, their arousal decides whether they go again)"),
 			B("General", "StopWhenFound", &Data::stopWhenFound, "; NPC scenes end, or never start, when the player is detected"),
 			B("General", "TravelToLocation", &Data::travelToLocation, "; NPCs walk to the furniture first"),
 			B("General", "EnemiesTravelToLocation", &Data::enemiesTravelToLocation, "; enemies walk to the furniture first"),

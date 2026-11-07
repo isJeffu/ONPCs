@@ -13,6 +13,7 @@ namespace ONPCR::Settings
 		bool activeFollowersEngageOtherNPCs{ false }; // followers may pair with other NPCs
 		bool allowElderRace{ false };                 // elders may be picked
 		bool allowCommonEnemies{ true };              // bandits etc. have scenes in their camps
+		bool oneScenePerNight{ true };                // 0.1.3 (user 7 Nov): at most one scene per NPC per night; off = short break, then arousal decides
 		bool stopWhenFound{ true };                   // NPC scenes end (or never start) when the player is detected
 		bool travelToLocation{ true };                // NPCs walk to the furniture first
 		bool enemiesTravelToLocation{ false };        // enemies walk to the furniture first

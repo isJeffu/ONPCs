@@ -2,6 +2,7 @@
 
 #include "Amulet.h"
 #include "Babies.h"
+#include "Base.h"
 #include "Liita.h"
 #include "Settings.h"
 
@@ -532,6 +533,7 @@ namespace ONPCR::Ladder
 		// ---- co-save ----
 		void OnSave(SKSE::SerializationInterface* a_intfc)
 		{
+			Base::Save(a_intfc);  // 0.1.3: the base's breaks, before our lock (Base takes its own)
 			std::scoped_lock lock(guard);
 			if (a_intfc->OpenRecord(kRecordState, kRecordVersion)) {
 				a_intfc->WriteRecordData(&lastSimDay, sizeof(lastSimDay));
@@ -731,6 +733,9 @@ namespace ONPCR::Ladder
 			pendingSeeded = false;
 			std::uint32_t type = 0, version = 0, length = 0;
 			while (a_intfc->GetNextRecordInfo(type, version, length)) {
+				if (Base::LoadRecord(a_intfc, type, version)) {
+					continue;  // 0.1.3: the base's breaks (Base keeps them under a leaf lock until a scan or OnPostLoad merges them)
+				}
 				if (type == kRecordState) {
 					Read(a_intfc, lastSimDay);
 					continue;

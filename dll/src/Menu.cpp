@@ -728,6 +728,8 @@ namespace ONPCR::Menu
 				}
 				Hint("Off = no NPC starts a scene by themselves (the scans around you stop). The match-maker spells still work.");
 			}
+			Toggle("One scene a night", draft.oneScenePerNight, "OneScenePerNight",
+				"On: each NPC has at most one scene a night. Off: after a short break, their arousal decides whether they go again.");
 			Toggle("Scenes end when found", draft.stopWhenFound, "StopWhenFound",
 				"NPC scenes end, and never start, when the player is detected. Does not apply to follower scenes.");
 			Toggle("NPCs walk to the furniture", draft.travelToLocation, "TravelToLocation",

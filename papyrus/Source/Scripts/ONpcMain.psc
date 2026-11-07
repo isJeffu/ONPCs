@@ -61,6 +61,7 @@ bool property NoScenesInInns auto
 
 bool property SettingCellChange auto
 bool property Privacy = true auto	; 0.27.2: couples want privacy (read from the DLL; no plugin value)
+bool property OneScenePerNight = true auto	; 0.1.3: at most one scene per NPC per night (read from the DLL; no plugin value)
 
 ; ============================================================
 ; OStim NPCs Reforged - relationship settings (Relations Finder + Lover's Ledger)
@@ -670,6 +671,34 @@ ObjectReference Function FindEmptyBed(Actor Dom, Actor Sub = None, Actor Third =
 
 	Int i = Beds.Length
 
+	; 0.1.3: a sleeping couple picks a private bed too (their own first, nobody can see it) - before anyone is woken up.
+	; None private = no scene (they sleep on). Followers and enemy camps don't mind, as for awake couples.
+	bool caresAboutPrivacy = Privacy && !IsFollower(Dom) && !(Sub && IsFollower(Sub)) && !(Third && IsFollower(Third)) && !(IsEnemy(Dom) && (!Sub || IsEnemy(Sub)))
+	if caresAboutPrivacy
+		ObjectReference[] free = PapyrusUtil.ObjRefArray(0)
+		While i > 0
+			i -= 1
+			if Beds[i] && JArray.FindForm(FurnituresInUse, Beds[i]) == -1 && !TMS_IsFurnitureOccupiedByOther(Beds[i], Dom, Sub, Third)
+				free = PapyrusUtil.PushObjRef(free, Beds[i])
+			endif
+		EndWhile
+		Actor[] members = PapyrusUtil.ActorArray(1, Dom)
+		if Sub
+			members = PapyrusUtil.PushActor(members, Sub)
+		endif
+		if Third
+			members = PapyrusUtil.PushActor(members, Third)
+		endif
+		ObjectReference pick = None
+		if free.Length
+			pick = ONPCR_Base.PickPrivateBed(members, free)
+		endif
+		if pick
+			JArray.addForm(FurnituresInUse, pick)
+		endif
+		return pick
+	endif
+
 	While i > 0
 		i -= 1
 
@@ -700,6 +729,10 @@ EndFunction
 
 Bool Function ActorIsValid(Actor Act)
 	if IsInvalidNpc(Act) || IsPlayerORomancePartner(Act) || ActorIsInCombatState(Act) || Act.GetCurrentScene() != None || !Act.Is3DLoaded() || Act.IsInDialogueWithPlayer() || OStim.IsActorActive(Act) || IsInJArrays(Act) || ActorHasOPrivacyPackage(Act) || IsPlayerPartner(Act)
+		return false
+	endif
+	; 0.1.3: an NPC a running quest is driving (a quest package or an alias package: waiting for you, escorting, a job) is left alone
+	if ONPCR_Ladder.IsQuestDriven(Act)
 		return false
 	endif
 
@@ -904,6 +937,7 @@ Function ReloadReforgedSettings()
 	; 0.26.0: the pair weights, minimum relationship, stray chance, history weight and stranger score are no longer read here -
 	; the DLL picks the couples (the weights are its on/off per pairing); their properties stay declared for old saves
 	Privacy = ONPCR_Settings.GetBool("Privacy", true) && ONPCR_Settings.GetVersion() >= 23
+	OneScenePerNight = ONPCR_Settings.GetBool("OneScenePerNight", true)
 	UseRelationsFinderFamily = ONPCR_Settings.GetBool("UseRelationsFinderFamily", UseRelationsFinderFamily)
 	UseLoversLedger = ONPCR_Settings.GetBool("UseLoversLedger", UseLoversLedger)
 	; advanced

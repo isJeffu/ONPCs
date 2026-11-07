@@ -153,6 +153,44 @@ namespace ONPCR::Base
 			return (static_cast<std::uint64_t>(lo) << 32) | hi;
 		}
 
+		// 0.1.3: breaks read from the co-save. The load runs inside Ladder's callback (its own lock held), so the records wait
+		// here under a leaf lock and are merged by the next caller that holds `mutex` (OnPostLoad, a scan, a save)
+		struct Loaded
+		{
+			std::vector<std::pair<RE::FormID, float>>    scene;
+			std::vector<std::pair<RE::FormID, float>>    fulfilled;
+			std::vector<std::pair<std::uint64_t, float>> together;
+			bool                                         any = false;
+		};
+		std::mutex loadMutex;  // leaf: never held while taking another lock
+		Loaded     loaded;
+
+		// caller holds the mutex; a value this session already has (a scene since the load) wins when it is later
+		void MergeLoaded()
+		{
+			Loaded l;
+			{
+				std::scoped_lock lock{ loadMutex };
+				if (!loaded.any) {
+					return;
+				}
+				l = std::move(loaded);
+				loaded = {};
+			}
+			for (const auto& [id, day] : l.scene) {
+				auto& v = lastSceneOf[id];
+				v = std::max(v, day);
+			}
+			for (const auto& [id, day] : l.fulfilled) {
+				auto& v = lastFulfilled[id];
+				v = std::max(v, day);
+			}
+			for (const auto& [key, day] : l.together) {
+				auto& v = lastTogether[key];
+				v = std::max(v, day);
+			}
+		}
+
 		float Today()
 		{
 			auto* cal = RE::Calendar::GetSingleton();
@@ -646,6 +684,7 @@ namespace ONPCR::Base
 			{
 				std::scoped_lock lock{ mutex };
 				gen = generation;
+				MergeLoaded();  // 0.1.3: breaks from the co-save, if OnPostLoad has not run yet
 				if (!refMapBuilt) {
 					BuildRefMap();
 				}
@@ -1032,6 +1071,7 @@ namespace ONPCR::Base
 			{
 				std::scoped_lock lock{ mutex };
 				gen = generation;
+				MergeLoaded();  // 0.1.3: breaks from the co-save, if OnPostLoad has not run yet
 				if (!refMapBuilt) {
 					BuildRefMap();
 				}
@@ -1445,10 +1485,113 @@ namespace ONPCR::Base
 		}
 	}
 
+	// ---- 0.1.3: the breaks survive a save / load (co-save records in ONPCs' own co-save, written from Ladder's callbacks) ----
+	namespace
+	{
+		constexpr std::uint32_t kRecScene = 'BASS';      // each NPC's last scene (or "gave up for lack of privacy") - their break
+		constexpr std::uint32_t kRecTogether = 'BAST';   // each couple's last scene together
+		constexpr std::uint32_t kRecFulfilled = 'BASF';  // Reforged's own desire: each NPC's last fulfilling scene
+		constexpr std::uint32_t kRecVersion = 1;
+		constexpr float         kKeepDays = 10.0f;  // older values no longer change anything (breaks are hours, desire tops out in days)
+
+		bool ReadRaw(SKSE::SerializationInterface* a_intfc, void* a_out, std::uint32_t a_size) { return a_intfc->ReadRecordData(a_out, a_size) == a_size; }
+
+		void WriteRecord(SKSE::SerializationInterface* a_intfc, std::uint32_t a_type, const std::vector<std::pair<RE::FormID, float>>& a_rows)
+		{
+			if (!a_intfc->OpenRecord(a_type, kRecVersion)) {
+				return;
+			}
+			const auto n = static_cast<std::uint32_t>(a_rows.size());
+			a_intfc->WriteRecordData(&n, sizeof(n));
+			for (const auto& [id, day] : a_rows) {
+				a_intfc->WriteRecordData(&id, sizeof(id));
+				a_intfc->WriteRecordData(&day, sizeof(day));
+			}
+		}
+	}
+
+	void Save(SKSE::SerializationInterface* a_intfc)
+	{
+		std::vector<std::pair<RE::FormID, float>> scene;
+		std::vector<std::pair<RE::FormID, float>> fulfilled;
+		std::vector<std::pair<std::uint64_t, float>> together;
+		const float keep = Today() - kKeepDays;
+		{
+			std::scoped_lock lock{ mutex };
+			MergeLoaded();
+			for (const auto& [id, day] : lastSceneOf) {
+				if (day > keep) {
+					scene.emplace_back(id, day);
+				}
+			}
+			for (const auto& [id, day] : lastFulfilled) {
+				if (day > keep) {
+					fulfilled.emplace_back(id, day);
+				}
+			}
+			for (const auto& [key, day] : lastTogether) {
+				if (day > 0.0f && day > keep) {  // "never" (0) is only a cache: asked again from Lover's Ledger
+					together.emplace_back(key, day);
+				}
+			}
+		}
+		WriteRecord(a_intfc, kRecScene, scene);
+		WriteRecord(a_intfc, kRecFulfilled, fulfilled);
+		if (a_intfc->OpenRecord(kRecTogether, kRecVersion)) {
+			const auto n = static_cast<std::uint32_t>(together.size());
+			a_intfc->WriteRecordData(&n, sizeof(n));
+			for (const auto& [key, day] : together) {
+				const auto lo = static_cast<RE::FormID>(key >> 32);
+				const auto hi = static_cast<RE::FormID>(key & 0xFFFFFFFF);
+				a_intfc->WriteRecordData(&lo, sizeof(lo));
+				a_intfc->WriteRecordData(&hi, sizeof(hi));
+				a_intfc->WriteRecordData(&day, sizeof(day));
+			}
+		}
+	}
+
+	bool LoadRecord(SKSE::SerializationInterface* a_intfc, std::uint32_t a_type, std::uint32_t a_version)
+	{
+		if (a_type != kRecScene && a_type != kRecTogether && a_type != kRecFulfilled) {
+			return false;
+		}
+		std::uint32_t n = 0;
+		if (a_version != kRecVersion || !ReadRaw(a_intfc, &n, sizeof(n))) {
+			return true;  // ours, but a layout this build doesn't know: skipped
+		}
+		std::scoped_lock lock{ loadMutex };
+		loaded.any = true;
+		for (std::uint32_t i = 0; i < n; ++i) {
+			if (a_type == kRecTogether) {
+				RE::FormID lo = 0, hi = 0, rlo = 0, rhi = 0;
+				float      day = 0.0f;
+				if (!ReadRaw(a_intfc, &lo, sizeof(lo)) || !ReadRaw(a_intfc, &hi, sizeof(hi)) || !ReadRaw(a_intfc, &day, sizeof(day))) {
+					break;
+				}
+				if (a_intfc->ResolveFormID(lo, rlo) && a_intfc->ResolveFormID(hi, rhi)) {
+					loaded.together.emplace_back(PairKey(rlo, rhi), day);
+				}
+				continue;
+			}
+			RE::FormID id = 0, resolved = 0;
+			float      day = 0.0f;
+			if (!ReadRaw(a_intfc, &id, sizeof(id)) || !ReadRaw(a_intfc, &day, sizeof(day))) {
+				break;
+			}
+			if (a_intfc->ResolveFormID(id, resolved)) {
+				(a_type == kRecScene ? loaded.scene : loaded.fulfilled).emplace_back(resolved, day);
+			}
+		}
+		SKSE::log::info("Base: {} break record(s) loaded ({:c}{:c}{:c}{:c})", n, static_cast<char>(a_type >> 24), static_cast<char>(a_type >> 16),
+			static_cast<char>(a_type >> 8), static_cast<char>(a_type));
+		return true;
+	}
+
 	void OnPostLoad()
 	{
 		{
 			std::scoped_lock lock{ mutex };
+			MergeLoaded();
 			if (!refMapBuilt) {
 				BuildRefMap();
 			}
@@ -1477,5 +1620,7 @@ namespace ONPCR::Base
 		refOfBase.clear();
 		refMapBuilt = false;
 		widowedLogged.clear();
+		std::scoped_lock load{ loadMutex };
+		loaded = {};
 	}
 }
