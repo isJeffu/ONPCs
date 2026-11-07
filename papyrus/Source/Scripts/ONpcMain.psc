@@ -237,7 +237,12 @@ Event OnUpdate()
 		if isNightTime && !JArraysCreated
 			CreateJArrays()
 		endif
-	
+
+		; 0.1.4: a slot whose OStim scene ended without the end event is freed during play too (two misses in a row)
+		if ActiveScenes > 0
+			FreeStuckSubthreads(false)
+		endif
+
 		if !Scanning && isNightTime && !PlayerRef.IsInCombat() && ActiveScenes < MaxScenes && LocationIsValid()
 			ONpcSubthread subthreadToUse = GetUnusedSubthread()
 
@@ -408,6 +413,9 @@ bool Function StartGroup(ONpcSubthread SubthreadToUse, Actor[] group)
 	ObjectReference furnitureRef
 	if EnableFurniture
 		furnitureRef = FindEmptyFurniture(group[0], group[1], group[2], group.Length, group)
+		if !furnitureRef && CaresAboutPrivacy(group[0], group[1], group[2], group)
+			return false	; 0.1.4: no private bed = no group scene in the open (user 7 Nov)
+		endif
 		if (ScenesStartIn == AnyFurniture || ScenesStartIn == BedsOnly) && !furnitureRef
 			if !(IsEnemy(group[0]) && IsEnemy(group[1]) && EnemiesIgnoreScenesStartInRules)
 				return false
@@ -457,6 +465,12 @@ Function ContinueScene(ONpcSubthread SubthreadToUse, Actor Dom, Actor Sub, Actor
 		endif
 	elseif EnableFurniture
 		furnitureRef = FindEmptyFurniture(Dom, Sub, Third)
+
+		; 0.1.4: no private bed = no scene in the open, whatever "scenes start in" says (user 7 Nov)
+		if !furnitureRef && CaresAboutPrivacy(Dom, Sub, Third, None)
+			Scanning = false
+			return
+		endif
 
 		if (ScenesStartIn == AnyFurniture || ScenesStartIn == BedsOnly) && !furnitureRef
 			if IsEnemy(Dom) && IsEnemy(Sub)
@@ -592,16 +606,7 @@ ObjectReference Function FindEmptyFurniture(Actor Dom, Actor Sub = None, Actor T
 
 	; 0.27.2 privacy: every free bed is a candidate, the DLL picks the private one (their own first); none private = none.
 	; Followers and enemy camps don't mind (as in OStim NPCs)
-	bool caresAboutPrivacy = Privacy && !IsFollower(Dom) && !(Sub && IsFollower(Sub)) && !(Third && IsFollower(Third)) && !(IsEnemy(Dom) && (!Sub || IsEnemy(Sub)))
-	if caresAboutPrivacy && Members
-		int mi = 0
-		while mi < Members.Length
-			if Members[mi] && IsFollower(Members[mi])
-				caresAboutPrivacy = false
-			endif
-			mi += 1
-		endwhile
-	endif
+	bool caresAboutPrivacy = CaresAboutPrivacy(Dom, Sub, Third, Members)
 	if caresAboutPrivacy
 		ObjectReference[] free = PapyrusUtil.ObjRefArray(0)
 		While i > 0
@@ -666,6 +671,22 @@ ObjectReference Function FindEmptyFurniture(Actor Dom, Actor Sub = None, Actor T
 EndFunction
 
 
+; 0.27.2 / 0.1.4: does this scene want privacy? Followers and enemy camps don't mind (as in OStim NPCs)
+bool Function CaresAboutPrivacy(Actor Dom, Actor Sub, Actor Third, Actor[] Members)
+	if !Privacy || IsFollower(Dom) || (Sub && IsFollower(Sub)) || (Third && IsFollower(Third)) || (IsEnemy(Dom) && (!Sub || IsEnemy(Sub)))
+		return false
+	endif
+	int mi = 0
+	while Members && mi < Members.Length
+		if Members[mi] && IsFollower(Members[mi])
+			return false
+		endif
+		mi += 1
+	endwhile
+	return true
+EndFunction
+
+
 ObjectReference Function FindEmptyBed(Actor Dom, Actor Sub = None, Actor Third = None)
 	ObjectReference[] Beds = OSANative.FindBed(Dom, (OStim.FurnitureSearchDistance + 15) * 100.0, 96.0)
 
@@ -673,7 +694,7 @@ ObjectReference Function FindEmptyBed(Actor Dom, Actor Sub = None, Actor Third =
 
 	; 0.1.3: a sleeping couple picks a private bed too (their own first, nobody can see it) - before anyone is woken up.
 	; None private = no scene (they sleep on). Followers and enemy camps don't mind, as for awake couples.
-	bool caresAboutPrivacy = Privacy && !IsFollower(Dom) && !(Sub && IsFollower(Sub)) && !(Third && IsFollower(Third)) && !(IsEnemy(Dom) && (!Sub || IsEnemy(Sub)))
+	bool caresAboutPrivacy = CaresAboutPrivacy(Dom, Sub, Third, None)
 	if caresAboutPrivacy
 		ObjectReference[] free = PapyrusUtil.ObjRefArray(0)
 		While i > 0
@@ -1140,7 +1161,9 @@ EndFunction
 
 ; 0.26.0 phase 2: on load, a slot whose OStim scene is gone (saved mid-scene, the end event never came) stayed "busy" for good.
 ; Free those, and count the slots that are really busy (a slot still walking its NPCs over has no scene yet and is kept)
-Function FreeStuckSubthreads()
+; 0.1.4: also during play (atLoad = false): a slot is freed only after its scene was gone at two scans in a row, so an end
+; event that is merely late still does its own bookkeeping
+Function FreeStuckSubthreads(bool atLoad = true)
 	if ONPCR_Settings.GetVersion() < 20 || !ONpcSubthreadQuest
 		return
 	endif
@@ -1150,7 +1173,7 @@ Function FreeStuckSubthreads()
 	while i < 4
 		st = ONpcSubthreadQuest.GetNthAlias(i) as ONpcSubthread
 		if st && st.IsThreadInUse()
-			if st.GetOStimThreadID() >= 0 && !ONPCR_Base.IsSceneRunning(st.GetOStimThreadID(), st.GetDomActor())
+			if st.GetOStimThreadID() >= 0 && !ONPCR_Base.IsSceneRunning(st.GetOStimThreadID(), st.GetDomActor()) && (atLoad || st.MissedScene())
 				st.FreeStuckSlot()
 			else
 				busy += 1

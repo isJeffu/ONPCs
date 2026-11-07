@@ -18,6 +18,7 @@ bool IsFollowerScene
 ObjectReference CurrentFurniture
 
 int CurrentOStimSubthreadID
+int SceneMisses	; 0.1.4: scans in a row that found this slot's OStim scene gone (2 = freed during play)
 
 ; 0.26.0 scene log: climaxes this scene (ostim_actor_orgasm) and whether we stopped it because they were seen
 int DomClimaxes
@@ -135,11 +136,16 @@ Function StartScene()
 	actors[1] = SubActor
 
 	int BuilderID = OThreadBuilder.Create(actors)
+	if BuilderID < 0
+		SceneEndProcedures()
+		return
+	endif
 
 	if CurrentFurniture == none
 		OThreadBuilder.NoFurniture(BuilderID)
 	else
 		if !TMS_RunFurnitureGate("set-furniture gate")
+			OThreadBuilder.Cancel(BuilderID)	; 0.1.4: an aborted start no longer leaves the builder in OStim's memory
 			SceneEndProcedures()
 			return
 		endif
@@ -152,6 +158,7 @@ Function StartScene()
 	endif
 
 	if !CheckActorsStillValid() || PrivacyBlocks()
+		OThreadBuilder.Cancel(BuilderID)
 		SceneEndProcedures()
 		return
 	endif
@@ -561,6 +568,11 @@ Bool Function TMS_CanFallbackToNoFurniture()
 		return false
 	endif
 
+	; 0.1.4: a couple that wants privacy never falls back to a scene in the open when its bed is taken (user 7 Nov)
+	if ONpc.Privacy && !IsFollowerScene && !IsEnemyScene
+		return false
+	endif
+
 	if ONpc.ScenesStartIn == ONpc.AnyFurniture || ONpc.ScenesStartIn == ONpc.BedsOnly
 		if IsEnemyScene && ONpc.EnemiesIgnoreScenesStartInRules
 			return true
@@ -663,13 +675,24 @@ Actor Function GetDomActor()
 EndFunction
 
 ; 0.26.0: after a load this slot still says "busy" but its OStim scene is gone (the end event never came) - free it
+; (0.1.4: also during play, after two misses in a row)
 Function FreeStuckSlot()
-	Debug.Trace("ONPCR: scene slot " + ONpcThreadID + " freed after a load - its OStim scene " + CurrentOStimSubthreadID + " had ended")
+	Debug.Trace("ONPCR: scene slot " + ONpcThreadID + " freed - its OStim scene " + CurrentOStimSubthreadID + " had ended without the end event")
 	SceneEndProcedures()
+EndFunction
+
+; 0.1.4: called by ONpcMain when this slot's scene is gone: true on the second miss in a row (the end event is not just late)
+bool Function MissedScene()
+	SceneMisses += 1
+	return SceneMisses >= 2
 EndFunction
 
 
 Function SceneEndProcedures()
+	if KeptQuiet
+		SetQuiet(false)	; 0.1.4: also when the slot is freed without OStim's end event
+	endif
+	SceneMisses = 0
 	SubthreadPackages.ClearAliases(DomActor, SubActor, Nav1, Nav2, Target)
 
 	UnregisterForModEvent("ostim_thread_start")
@@ -826,10 +849,17 @@ bool Function CheckGroupStillValid()
 EndFunction
 
 
+; 0.1.4: every member of the scene counts (a group used to check only the hub)
 bool Function IsFound()
-	if PlayerRef.isdetectedby(DomActor) && (PlayerRef.haslos(DomActor) || DomActor.haslos(PlayerRef))
-		return true
-	endif
+	Actor[] who = SceneActors()
+	int i = 0
+	while i < who.Length
+		Actor a = who[i]
+		if a && PlayerRef.isdetectedby(a) && (PlayerRef.haslos(a) || a.haslos(PlayerRef))
+			return true
+		endif
+		i += 1
+	endwhile
 	return false
 EndFunction
 

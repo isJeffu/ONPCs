@@ -1157,9 +1157,22 @@ namespace ONPCR::Base
 				return false;
 			}
 			const auto handle = policy->GetHandleForObject(RE::Actor::FORMTYPE, a_actor);
+			// 0.1.4: the method call needs the actor's script object; one is made and bound if the VM has none yet (as CommonLib
+			// does when it hands a form to Papyrus)
+			RE::BSTSmartPointer<RE::BSScript::Object> object;
+			if (!vm->FindBoundObject(handle, "Actor", object)) {
+				auto* bind = vm->GetObjectBindPolicy();
+				if (vm->CreateObject("Actor", object) && object && bind) {
+					bind->BindObject(object, handle);
+				}
+			}
 			RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> cb;
 			auto* args = RE::MakeFunctionArguments(static_cast<RE::TESObjectREFR*>(a_target), 1.0f);
-			return vm->DispatchMethodCall(handle, "Actor", "PathToReference", args, cb);
+			const bool ok = vm->DispatchMethodCall(handle, "Actor", "PathToReference", args, cb);
+			if (!ok) {
+				SKSE::log::warn("Base: walk for {} could not start (PathToReference dispatch failed)", a_actor->GetName() ? a_actor->GetName() : "?");
+			}
+			return ok;
 		}
 
 		// ---- privacy (0.27.2, user 3 Nov): couples don't want to be seen; within earshot they keep quiet -------------------
@@ -1472,6 +1485,8 @@ namespace ONPCR::Base
 		};
 		if (!version || *version < REL::Version{ 7, 5, 1, 0 }) {
 			missing = "OStim Standalone 7.5.1+";
+		} else if (!ostimThreads) {
+			missing = "OStim's thread API";  // 0.1.4: without it a stuck scene slot could never be freed
 		}
 		need(L"RelationsFinder.dll", "Relations Finder");
 		need(L"LoversLedger.dll", "Lover's Ledger");

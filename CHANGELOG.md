@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.4-alpha
+- No scene in the open: when a couple (or group) that wants privacy finds no private bed, there is no scene, whatever "Scenes start in" says; a bed taken at the last moment no longer falls back to a scene where they stand.
+- "Scenes end when found" checks every member of a group scene, not just the first.
+- A scene slot whose OStim scene ended without the end event is freed during play too (after two scans in a row), not only after a load.
+- Muted ("keep quiet") NPCs are always unmuted when their slot is freed.
+- An aborted scene start cancels its OStim scene builder.
+- OStim's thread API is now a requirement (it was already needed in practice: 7.5.1+).
+- Group walks: the walk starts even for an NPC the script engine had not met yet; a failed walk is logged.
+- Relations Finder family exclusion stays a setting, on by default (also when the ini line is missing).
+
 ## 0.1.3-alpha
 - **One scene a night** (new setting, on by default): each NPC has at most one scene a night. Off = after a short break, their arousal decides whether they go again (the 0.1.2 behaviour).
 - NPCs a running quest is driving (a quest or alias package: waiting for you, escorting, a job) are no longer picked for scenes.

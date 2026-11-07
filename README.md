@@ -3,7 +3,7 @@
 A GPL-3.0 successor to **[OStim NPCs - NPC Sex Lives Improved](https://www.nexusmods.com/skyrimspecialedition/mods/82888)** by **Aietos**,
 rebuilt around an SKSE plugin. This is **not** an official update of Aietos's mod.
 
-> **Status: 0.1.3-alpha.** Expect bugs. Use a new game or a test save.
+> **Status: 0.1.4-alpha.** Expect bugs. Use a new game or a test save.
 
 ## What it does
 At night, couples who already belong together - spouses, fiancees and courting couples from the game's own records - may have
